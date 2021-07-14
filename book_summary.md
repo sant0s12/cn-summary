@@ -1,4 +1,5 @@
 ---
+toc: 1
 geometry: top=1cm, bottom=1cm, left=1cm, right=1cm
 header-includes: |
     \pagenumbering{gobble}
@@ -375,4 +376,74 @@ local DNS server (LDNS) when the DNS request is made. This can be inaccurate
 because geographical closeness does not always mean better connection. For
 better estimates, real time measurements are needed.
 
+# 3. Transport Layer
 
+## 3.1 Introduction to Transport-Layer Services
+
+They provide *logical communication* between applications running on different
+hosts, a layer of abstraction that creates the illusion of a direct connection
+and ignores the complexity of the underlying layers.
+
+The transport layer is not implemented by network devices but end to end
+systems. The current Internet has two protocols, TCP and UDP. They are
+responsible of delivering application layer messages to the network layer
+(possibly by breaking them apart into smaller chunks). However, they do not
+affect how the packets are sent along the network, that is the responsibility
+of the network layer. Different protocols may offer different service models but
+they are constrained by the capabilities of the network later protocols.
+
+User Datagram Protocol (UDP)
+: Unreliable, connectionless
+
+Transmission Control Protocol (TCP)
+: Reliable, connection-oriented
+
+UDP and TCP extend the IP protocol from communication between systems to
+communication between processes. This is done by *transport-layer multiplexing*
+and *demultiplexing*. They also provide some integrity checking.
+
+## 3.2 Multiplexing and Demultiplexing
+
+Transport layer receives segment form the network layer and is supposed to
+deliver the message to the correct process running on the host. Because
+applications can have more than one connection open to the network (so called
+*sockets*), the transport layer does not deliver the message directly but
+instead does so via one of the open sockets.
+
+Demultiplexing
+: Delivering data from a transport-layer segment to the correct socket.
+
+Multiplexing
+: Gathering data chunks from different sockets and encapsulating each chunk in
+transport-layer segments to be passed to the network layer.
+
+![](images/multiplexing_demultiplexing.png)
+
+For multiplexing/demultiplexing to work, ports must have unique identifiers and
+the transport-layer headers must indicate the target socket.
+
+There are some "well-known" port numbers which are used for specific
+protocols/services (e.g. 80 for HTTP or 21 for FTP).
+
+### UDP Multiplexing/Demultiplexing
+
+Application Data → Transport-layer segment including source port and destination
+port → Network Layer → IP Datagram → Receiving Host → Receiving socket on
+destination port
+
+A UDP socket is fully identified by the destination IP address and destination
+port number. The source port number is not taken into account. Instead, it is
+used for the receiving host to communicate back with the sending host.
+
+### TCP Multiplexing/Demultiplexing
+
+TCP sockets are identified by a source IP and port number, and a destination IP
+and port number. This is why a packet from host A to port P and a packet from
+another host B to the same port P will not map to the same socket on the
+receiving system.
+
+This is useful for web servers, as the HTTP request have destination port 80 and
+would not be able to be correctly demultiplexed if TCP sockets were only
+identified like UDP sockets. Web servers will then spawn new threads/processes
+with respectively new sockets for each connection. These will then be
+reused/closed depending on if the connection is persistent or not.
