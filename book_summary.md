@@ -447,3 +447,131 @@ would not be able to be correctly demultiplexed if TCP sockets were only
 identified like UDP sockets. Web servers will then spawn new threads/processes
 with respectively new sockets for each connection. These will then be
 reused/closed depending on if the connection is persistent or not.
+
+## 3.3 Connectionless Transport: UDP
+
+UDP implements minor thing on top of IP (multiplexing/demultiplexing and error
+checking). The goal is to have an almost direct communication between the
+application layer and the network layer. While it is not as robust as TCP, it
+provides the following benefits:
+
+- Finer application-level control
+    : Direct transport from UDP to network layer, no need to wait on congestion
+    control, segment resends, acknowledgment packets, etc.
+
+- No connection establishment
+    : UDP can directly begin to send packets instead of first having to setup
+    a connection like in TCP.
+
+- No connection state
+    : While TCP maintains a connections state, UDP does not. This means less
+    overhead and thus better handling of large amounts of connections.
+
+- Small packet overhead
+    : TCP has 20 bytes of header overhead while UDP only has 8.
+
+Multimedia applications usually run over UDP, especially if they can tolerate
+some packet loss in exchange for better latency because of the lack of
+congestion control. This also makes UDP somewhat controversial because it could
+be misused and lead to large congestion throughout the network.
+
+If reliability is a must, it can also be implemented on top of UDP (e.g. QUIC).
+
+### Checksum
+
+The checksum field of the UDP header is the 1s compliment (bitwise inverse) of
+the sum of all 16-bit words in the segment. The receiver then adds all 16-bit
+words (including the checksum) and determines if there is an error in the
+packet (if all bits are 16, then there are no errors). There is no mechanism for
+error correction, some implementations discard the packet and others hand it
+over to the application layer with a warning.
+
+**Example:**
+
+W1: `0110011001100000`\
+W2: `0101010101010101`\
+W3: `1000111100001100`
+
+W1 + W2: `1011101110110101`\
+W1 + W2 + W3: `0100101011000010`\
+Checksum: `1011010100111101`
+
+This error checking is important because the IP protocol does not guarantee any
+form of error checking on lower layers.
+
+## 3.4 Principles of Reliable Data Transfer
+
+Implement a reliable transport service on top of an unreliable layer (e.g. IP).
+
+### Channel with bit errors
+
+A protocol implemented on this channel will need
+
+- Error detection
+    : Detecting bit errors (without correction).
+
+- Receiver feedback
+    : ACK for acknowledging a correctly received packet and NAK for the
+    contrary.
+
+- Retransmission
+    : Retransmit incorrectly received packets.
+
+![](images/automata_1.png)
+
+One possible way of handling corrupted ACK/NAK packets is by resending every
+time the sender receives a corrupted ACK/NAK. This introduces duplicate packets.
+
+To solve this one could add sequence numbers (like TCP). Assuming no packets are
+lost, a 1-bit sequence number is sufficient for the *stop-and-wait* protocol to
+know if a packet is new or is being resent.
+
+![](images/automata_2_send.png)
+![](images/automata_2_receive.png)
+
+### Lossy channel with bit errors
+
+Now the channel can also lose packets.
+
+The sender is tasked with detecting and handling packet loss. In this case, if
+the sender has not received an ACK in a period of time, it resends the packet
+again. Now NAKs are replaced with duplicate ACKs (resending an ACK for the last
+correctly received packet), this means that ACKs need to also include the
+sequence number of the packed being acknowledged.
+
+The time that the sender needs to wait in order to be sure that the packet was
+lost is very difficult to estimate but it's at least the RTT plus packet
+processing delays. Duplicate packets are caused by this estimate being too low.
+Retransmission on the sender side can be implemented with a *countdown timer*.
+
+![](images/automata_3_send.png)
+
+### Pipelined Protocol
+
+Although the last protocol is correct, the performance leaves a lot to be
+desired because only one packet is sent at a time. To solve this, the sender
+could be allowed to send multiple packets without waiting for ACKs for each of
+them.
+
+- Range of sequence numbers must be increased
+- Buffers must be increased
+
+Go-Back-N (GBN) Protocol
+: Sliding window protocol with window size $N$. At most $N$ packets are
+allowed to be sent at once. ACKs are cumulative and after a timeout event, all
+unacknowledged packets are resent. This means that with a large window size,
+a single packet loss can cause a large retransmission. Out of order packets are
+not buffered.
+
+![](images/go_back_n.png)
+
+Selective Repeat (SR) Protocol
+: Sliding window protocol with window size $N$. In this protocol, packed will be
+ACKed and buffered weather or not they were received in order. Now each packet
+must have its own timer. Packets below the window base are also acknowledged.
+Problem: sender and receiver window might not be synchronized. To avoid
+confusion between new and resent packets, the window size must be less than or
+equal to half the size of the sequence number space.
+
+![](images/sr_operation.png)
+![](images/sr_large_window.png)
