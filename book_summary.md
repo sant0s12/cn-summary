@@ -270,4 +270,109 @@ just serve the cached file.
 
 ## 2.4 DNS
 
+Hostname
+: Mnemonic, human readable identifier for a host.
+
+While hostnames are useful for humans, IP addresses are what identify systems
+within the Internet. DNS takes care of translating these nice human readable
+names into useful IP addresses.
+
+DNS also provides other services:
+
+- Host aliasing
+    : Alias hosts with complicated canonical hostnames to one or more other
+    user-friendly names.
+- Mail server aliasing
+    : MX records so that mail and web servers can have the same name while
+    pointing to different canonical hostnames.
+- Load distribution
+    : Sites with lots of traffic are replicated across different servers. All
+    those are mapped to the same hostname but the DNS server lists them in
+    a different order every time to balance the load.
+
+Centralized single DNS databases do not scale, that is why DNS is a distributed
+system composed of *root*, *top-level domain* and *authoritative
+DNS servers*.
+
+Root DNS Servers
+: Provide IP addresses of the TLD servers.
+
+Top-level Domain Servers
+: (e.g. com, org, net, edu and all the country top-level domains), provide the
+IP addresses of the authoritative DNS servers.
+
+Authoritative DNS Servers
+: Stores mappings between public hostnames and IP addresses for publicly
+accessible hosts.
+
+Local DNS Server
+: Not strictly part of the hierarchy. This server forwards the DNS query made by
+the client to the hierarchy.
+
+![](images/dns_query.png)
+
+Recursive Query
+: Asking the DNS server to perform the query on your behalf.
+
+Iterative Query
+: Query the DNS server. It will respond with the IP address of the next DNS
+server but will not perform the request for you.
+
+DNS Caching
+: Any DNS server that receives a DNS reply can cache the mapping locally so that
+a future DNS request is not necessary. It can provide the mapping even if it is
+not the authoritative DNS server. This is discarded after some time.
+
+Registrar
+: Commercial entity that verifies the uniqueness of the domain name and enters the
+domain name into the DNS database.
+
+## 2.6 Video Streaming and Content Distribution Networks
+
+Video streaming accounts for the majority of traffic in residential ISPs.
+
+Prerecorded videos placed on servers, they can be accessed by users *on demand*.
+Videos are just arrays of pixels displayed at usually a constant amounts of
+frames per second (*FPS*). They can be compressed. The average throughput of the
+network must be on average higher than the video's bitrate in order to stream
+the video without buffering.
+
+Dynamic Adaptive Streaming over HTTP (DASH)
+: Solves the problem of every client receiving the same encoding of the video
+independently of network conditions or bandwidth. This is done by splitting the
+video into different chunks with different bitrates which the client can chose
+depending of the available bandwidth. The bandwidth is determined using an
+algorithm while downloading other chunks.
+
+Distributing video content all around the world can be challenging if a company
+were to only have one central data center. This is (amongst other reasons because
+they would not be in control of bottleneck links and would have to pay the ISPs
+to use large amounts of bandwidth (maybe even sending the same content many
+times).
+
+Content Distribution Networks
+: Distribution of servers across the world with copies of the content which is
+to be delivered to the user. When a user connects to the service, the server
+which provides the best experience will be used. CDNs try to solve the
+challenges mentioned above.
+
+**Two server placement philosophies:**
+
+- Enter Deep
+    : Deploy server clusters in access ISPs all over the world. Goal: get closer
+    to end users. Problem: Maintaining clusters can be hard.
+
+- Bring Home
+    : Small amount of clusters at Internet Exchange Points (IXPs). Goal: lower
+    maintenance. Problem: possible higher delays.
+
+DNS is used to redirect traffic from sites to the CDNs by replying to the DNS
+request with the a hostname on the CDN domain instead of an IP address. That
+way, the DNS request is "handed over".
+
+Cluster selection might be done based on the location of the IP address of the
+local DNS server (LDNS) when the DNS request is made. This can be inaccurate
+because geographical closeness does not always mean better connection. For
+better estimates, real time measurements are needed.
+
 
