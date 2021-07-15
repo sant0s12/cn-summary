@@ -798,3 +798,141 @@ they can increase their congestion window quicker. This is also made worse by
 the fact that each connection on a system counts the same as an independent one,
 making systems with more parallel connections achieve higher bandwidths. Also, 
 the lack of fairness of UDP packets can cause TCP to be crowded out.
+
+# 4. The Network Later: Data Plane
+
+## 4.1 Overview of the Network Layer
+
+**Main Network Layer Functions:**
+
+- Forwarding
+    : When a packet arrives at a router, it must be correctly forwarded through
+    the appropriate output link in the direction of the destination host.
+    Implemented in the data plane.
+- Routing
+    : Determining the route from sender to receiver through routing algorithms.
+    Implemented in the control plane.
+
+Forwarding table
+: Table that is indexed using a packet's header values to determine the link
+    interface to which the packet should be forwarded. The content is determined
+    by the routing algorithm. In a traditional approach routers have both
+    routing and forwarding capabilities but another approach would be to have
+    a separate remote control plane that sends update packets to the routers.
+
+Best-effort service
+: This is the network service model that the Internet's network layer
+provides.
+
+- No guarantee of in order arrival
+- No guarantee of packet delivery
+- No guarantee on delay
+- No guarantee on minimum bandwidth
+
+## 4.3 The Internet Protocol (IP)
+
+Two versions: IPv4 and IPv6.
+
+The IP packet (segment) header contains fields with information regarding the
+datagram. E.g. source and destination IP addresses, time-to-live, and checksum;
+as well as a data field.
+
+### Datagram Fragmentation
+
+The MTU of the link-layer protocol limits the maximum size of an IP datagram. IP
+datagrams bigger than the MTU are *fragmented* into smaller IP datagrams and
+then encapsulated in link-layer frames. For performance and simplicity reasons,
+the datagram reassembly is done in the end systems and not in the routers. IP
+headers therefore include *identification*, *flag* and *fragmentation offset*
+fields.
+
+### IP Addressing
+
+IP addresses uniquely (except the private IP range) identify interfaces on a router
+or host. It is 32 bits long and it is divided into two main parts. Written in
+the form `a.b.c.d/x`, the `x` most significant bits represent the network portion
+(aka. *prefix*) while the remaining bits identify hosts within that network
+(they may also have further subnets).
+
+Broadcast Address
+: The address `255.255.255.255` is reserved for forwarding packets to all hosts in
+the same subnet.
+
+Block addresses are assigned to organizations by their ISP these are subnets of
+the ISP's address range. ISPs get their addresses from regional Internet registers
+which get their addresses assigned by ICANN.
+
+**Example:**
+
+ISP's block:\
+`200.23.16.0/20` → **` 11001000 0001011 0001|`**`0000 0000000`
+
+Organization 0:\
+`200.23.16.0/23` → **` 11001000 0001011 0001000|`**`0 0000000`
+
+Organization 1:\
+`200.23.18.0/23` → **` 11001000 0001011 0001001|`**`0 0000000`
+
+Organization 2:\
+`200.23.20.0/23` → **` 11001000 0001011 0001010|`**`0 0000000`
+
+### Dynamic Host Configuration Protocol (DHCP)
+
+DHCP allows a host to be allocated an IP address inside a network automatically.
+Useful especially if hosts are connected and reconnected frequently or new
+hosts are added. For this, a DHCP server must be present in the same subnet.
+Otherwise a relay agent can forward the DHCP request to the correct subnet. The
+following steps are required for a host to get an IP address:
+
+1. DHCP server discovery
+    : Client sends UDP packet with destination address
+    `255.255.255.255` and source address `0.0.0.0`.
+2. DHCP server offer
+    : The server replies to the broadcast address with a proposed IP
+    address, the network mask, transaction ID and the *address lease time*.
+    The client might be able to choose between multiple addresses if the re
+    are multiple DHCP servers in the network and both send a proposal.
+3. DHCP request
+    : Client echoes back the chosen server's parameters.
+4. DHCP ACK
+    : Server confirms the parameters and client can use it's newly assigned
+    address.
+
+### Network Address Translation (NAT)
+
+NAT avoids having to assign a unique global IP to every network device that is
+connected to the Internet (this would not even be possible in IPv4). This is
+done by translating public IP addresses and port numbers to private IP and
+port numbers with a *NAT translation table*. There are multiple address spaces
+reserved for use in private networks so they cannot be used on the global internet.
+
+To the rest of the Internet, a NAT router looks like a single host. This breaks
+direct communication from an outside host to a host behind the NAT if no
+connection in the opposite direction was made before. It also violates the
+principle that routers should only process packets up to network layer because
+they modify IP addresses as well as port numbers.
+
+### IPv6
+
+IPv6 was developed as a response to the large number of hosts on the Internet
+and therefore the lack of available IPv4 addresses.
+
+**Important Changes**:
+
+1. Expanded addressing capabilities
+    : IP address extended from 32 to 128 bis. Anycast address was added so that
+    a packet can be delivered to any one of a group of hosts.
+2. Streamlined 40-byte header
+    : Some IPv4 header fields so that the resulting 40-byte fixed-length header
+    can be processed faster.
+3. Flow labeling
+    : Some packets treated as flow to be handled differently (e.g. video
+    streaming, high priority users, etc.).
+
+Fragmentation/assembly must be handled at the endpoints. If a sent datagram is
+too large, the router will send back an error packet instead of performing
+fragmentation.
+
+Additionally, the header checksum was removed and the optional fields are
+pointed to instead of being part of the standard header, making the header
+fixed-length.
