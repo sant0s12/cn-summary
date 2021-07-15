@@ -575,3 +575,226 @@ equal to half the size of the sequence number space.
 
 ![](images/sr_operation.png)
 ![](images/sr_large_window.png)
+
+## 3.5 Connection-Oriented Transport: TCP
+
+Before two hosts can begin to send data between each other using TCP, they must
+first establish a connection. This connection is said to be a *logical
+connection* unlike circuits in circuit-switched networks.
+
+TCP provides a *point-to-point full-duplex* service. That means that data can
+flow in both directions at the same time but no *multicasting* is supported.
+
+Three-way handshake
+: TCP connection establishment procedure.
+
+Maximum Segment Size (MSS)
+: Maximum amount of data that can be placed in the TCP segment (not the size of
+the whole segment).
+
+Maximum Transmission Unit (MTU)
+: Largest link-layer frame that can be sent by the local sending host. Ethernet
+and PPP have an MTU of 1,500 bytes.
+
+Sequence Number
+: The sequence number is part of the TCP segment header and is the byte-stream
+number of the first byte in the segment.
+
+Acknowledgment Number
+: This is also part of the TCP segment header. It denotes the next byte that the
+host is expecting to receive from the other system. TCP uses cumulative
+acknowledgment.
+
+Interestingly, TCP implementations are free to choose between bufferning or
+dropping out of order packets.
+
+### Estimating the RTT
+
+For every sent packet, SampleRTT is the time between sending the packet and
+receiving an ACK. This is measured approximately once every RTT but only for
+packets that were sent once.
+
+For every newly obtained SampleRTT, the EstimatedRTT is updated using
+$$\text{EstimatedRTT} = (1-\alpha) \cdot \text{EstimatedRTT} + \alpha \cdot
+\text{SampleRTT}$$
+The recommended value for $\alpha$ is 0.125.
+
+It is also useful to calculate the variability of the RTT.
+$$\text{DevRTT} = (1-\beta) \cdot \text{DevRTT} + \beta \cdot |\text{SampleRTT}
+- \text{EstimatedRTT}|$$
+The recommended value for $\beta$ is 0.25.
+
+Both are then used to determine the TCP retransmission timeout interval.
+$$\text{TimeoutInterval} = \text{EstimatedRTT} + 4 \cdot \text{DevRTT}$$
+
+It is recommended that TCP use only one timer. Once a new segment is passed to
+the network layer, the timer is started (with expiration equal to
+TimeoutInterval as explained above). Upon receiving an ACK with value $y$, this
+value is compared to the SendBase, which is the sequence number of the oldest
+unacknowledged byte. If $y >$ SendBase, then new packets are being ACKed, thus
+SendBase is updated and the timer is reset if all sent packets have been ACKed.
+
+Whenever there is a timeout, the protocol retransmits the oldest packet that has
+not been ACKed.
+
+Doubling the timeout interval every time a packet is retransmitted provides some
+sort of congestion control. This is because lost packets usually mean network
+congestion. If instead of exponentially increasing he timeout interval, we just
+resent the packets again and again, the congestion would only get worse.
+
+Duplicate ACKs may indicate that the segment following the one that is being
+ACKed has been lost. If there are 3 duplicate ACKs, the sender performs *fast
+retransmit*, that is, it sends the missing packet even before the timer runs
+out.
+
+TCP is a hybrid of GBN and SR protocols.
+
+### Flow Control
+
+Flow control by maintaining a variable *receive window*. This indicates the free
+space available in the receive buffer. For a sending host to make sure that the
+other host's receiving buffer is not being overflowed, it must ensued that
+$\text{LastByteSent} - \text{LastByteAcked} \leq \texttt{rwnd}$. The receive
+window is communicated from one host to another.
+
+### Establishing a TCP Connection
+
+1. Client sends SYN Segment with its sequence number
+2. Server allocates buffers and variables and sends connection-granted
+   segment and sets the ACK to the client's + 1. It puts its own sequence
+   number in the packet's SEQNO.
+3. Client also allocates buffers and variables and ACKs the packet with the
+   server's SEQNO + 1. This packet has SYN set to 0 and may carry
+   application data.
+
+## 3.6 Principles of congestion control
+
+One of the reason why congestion can occur is because of a shared link with
+outgoing bandwidth lower than the sum of incoming traffic bandwidth. Assuming
+the link has infinite buffers, as the sum increases, the average packet delay
+increases without bound.
+
+![](images/congestion_infinite_delay.png)
+
+Without the assumption of infinite buffers, the performance could look something
+like this.
+
+![](images/congestion_infinite_buffers.png)
+
+a. Assumes that packets are only sent when there is space in the buffer.
+b. Assumes that packets are only sent when it is known for certain that the
+   packet was lost.
+c. Assumes that packets may also be retransmitted unnecessarily.
+
+Congestion on multi-hop paths can sometimes be even worse because traffic being
+dropped at any link along the path means that the transmission capacity of the
+links before are being wasted.
+
+![](images/congestoin_multihop.png)
+
+### Approaches to Congestion Control
+
+- End-to-end congestion control
+    : Network layer provides no support for congestion control. This is the approach
+    TCP takes.
+- Network-assisted congestion control
+    : The network layer provide feedback about the congestion of the network.
+        - Direct feedback
+        : The router sends a packet to the sender indicating congestion.
+        - Indirect feedback
+        : The router marks a packet being sent from sender to receiver
+        indicating that the network is congested. The receiver will then inform
+        the sender.
+
+## 3.7 TCP Congestion Control
+
+TCP uses perceived network congestion to limit the rate at which data is being
+sent. To do so, the sender has a variable `cwnd` to keep track of the congestion
+window such that $$\text{LastByteSent} - \text{LastByteAcked} \leq
+\min\{\texttt{rwnd},\texttt{cwnd}\}$$ holds.
+
+Loss event
+: Timeout or receipt of three duplicate ACKs. This indicates to the sender that
+the network might be congested. The congestion window should be decreased.
+
+Self-clocking
+: TCP uses the arrival of ACKs as indication of a non-congested network. The
+congestion window can be increased. If they arrive at a slow rate, the
+congestion window will be increased slowly, otherwise (if the rate is higher),
+it will increase faster.
+
+### Slow start
+
+`cwnd` is initialized to 1 MSS and then it is grown by 1 MSS for every correctly
+received ACK packet. This result in a doubling of `cwnd` every RTT.
+
+If a timeout even occurs, cwnd is set back to 1 MSS and `ssthresh` is assigned
+half the value of cwnd when the congestion was detected and *slow start* is
+reentered. When `cwnd` once again
+reaches `ssthresh`, TCP enters *congestion avoidance mode*.
+
+If instead, three duplicate ACKs are received, a fast retransmit is performed
+and TCP enters *fast recovery mode*.
+
+![](images/congestion_fsm.png)
+
+### Congestion avoidance mode
+
+When TCP enters this state, `cwnd` is half what it was when congestion as
+detected. That means that doubling `cwnd` again like in the *slow start* mode
+could likely encounter congestion again. Instead, the congestion window is
+increased by $\text{MSS} \cdot \frac{\text{MSS}}{\texttt{cwnd}}$ every time an ACK
+is received. This causes `cwnd` to be increased by 1 MSS every RTT (instead of
+being doubled).
+
+When a timeout event occurs, this mode behaves the same as in *slow start* but
+for tree duplicate ACKs, `cwnd` is set to $\frac{\texttt{cwnd}}{2}
++ 3 \text{MSS}$, `ssthresh` is set to $\frac{\texttt{cwnd}}{2}$ and then
+*fast recovery mode* is entered.
+
+### Fast recovery mode
+
+`cwnd` is increased by 1 MSS for every duplicate ACK for the packet that was
+lost (these packets don't ACK the missing packet but the one before). Once the
+missing packet is ACKed, `cwnd` is halved and TCP enters *congestion avoidance
+mode*.
+
+When a timeout occurs, it is handled as in the *congestion avoidance* and *slow
+start* modes.
+
+Fast recovery is not mandatory in TCP so the early version *Tahoe* did not
+implement it and just handled the triple duplicate ACKs the same as timeout
+events.
+
+![](images/tahoe_reno.png)
+
+Additive-increase, multiplicative-decrease (AIMD)
+: TCP's congestion control behaviour (increasing `cwnd` additively when there is
+no congestion and decreasing it multiplicatively otherwise). It produces
+a saw-tooth pattern in the congestion window size.
+
+![](images/congestion_window_sawtooth.png)
+
+### Fairness
+
+Fair
+: If the average transmission rate of $K$ systems all connected to the same
+bottleneck link with rate $R$ is approximately $\frac{R}{K}$, then
+a congestion-control mechanism is said to be fair.
+
+![](images/fairness_bottleneck.png)
+
+Under ideal conditions, TCP is fair for any amount of connections sharing
+a bottleneck link. In a 2-connection example visualized by the graph, an
+additive increase will result in the increase of both throughputs along a 45
+degree line while a multiplicative increase results in a point halfway along
+a line from the current point towards the origin. Eventually the point
+fluctuates along the equal bandwidth line.
+
+![](images/fairness_graph.png)
+
+In reality, connections with lower RTT can achieve higher throughput because
+they can increase their congestion window quicker. This is also made worse by
+the fact that each connection on a system counts the same as an independent one,
+making systems with more parallel connections achieve higher bandwidths. Also, 
+the lack of fairness of UDP packets can cause TCP to be crowded out.
