@@ -1002,3 +1002,142 @@ and can lead to the *count-to-infinity* problem. This can be mitigated (but not
 fixed for the general case) by *poisoned reverse*. It consists of the following:
 If a router $z$ routes through $y$ to get to $x$, it will advertise to $y$ that
 its distance to $z$ is $\infty$.
+
+## 5.3 Insta-AS Routing in the Internet: OSPF
+
+In reality, the DV algorithm cannot be applied on a global scale due to the
+large about of network routers (large overhead) and the fact that the Internet
+is a network of network, and as such, ISPs usually want to run their network as
+they please.
+
+Therefore routers are usually clustered into *Autonomous Systems (ASs)*, that
+is, a group of routers that are administered by the same entity. Each AS has
+their own globally unique AS number (ASN) assigned by ICANN.
+
+Intra-autonomous system routing protocol
+: Routing algorithm that runs within an AS.
+
+In this protocol, each router has a complete graph of the whole AS and then runs
+Dijkstra's algorithm to computer the shortest paths to all subnets (from the
+current router). Edge weights must be set manually.
+
+OSPF broadcasts information to *all* other routers on link-state change and also
+periodically. This information is sent via IP so the reliable transport capacity
+must also be implemented.
+
+## 5.4 Routing Among the ISPs: BGP
+
+Border Gateway Protocol (BGP) is the intra-autonomous system routing protocol
+that all ISPs run and it has the following tasks:
+
+1. Obtain prefix reachability information from ASs
+    : Allows advertising of each subnet to the rest of the internet.
+    Reachability information is received from neighboring ASs.
+2. Determine the *best* routes to the prefixes
+    : Best route to a given prefix based on policy as well as reachability
+    information.
+
+### Advertising BGP Route Information
+
+Internal router
+: Connects only to hosts and routers within the AS.
+
+Gateway router
+: Connects to one or more routers in other ASs.
+
+BGP routers are connected with each other via TCP (called BGP connection).
+
+eBGP
+: BGP connection spanning two ASs.
+
+iBGP
+: BGP connection between routers within the same AS.
+
+![](images/eBGP_iBGP.png)
+
+**Example advertisement of prefix x:**
+
+1. 3a sends eBGP message `"AS3 x"` to 2c.
+2. 2c sends iBGP message `"AS3 x"` to all routers within AS2.
+3. 2a sends eBGP message `"AS2 AS3 x"` to 1c.
+4. 1c sends iBGP message `"AS2 AS3 x"` to all routers within AS1.
+
+### Determining the Best Routes
+
+Problem: Many paths from a router to a given destination subnet.
+
+Route
+: Prefix along with its *BGP attributes*. This is what is advertised across BGP
+connections.
+
+Important BGP attributes:
+
+- AS-PATH
+    : List of ASs through which the advertisement has passed (see above
+    example). The AS that passes the advertisement along prepends its own ASN
+    to the existing AS-PATH.
+
+- NEXT-HOP
+    : IP address of the router interface that begins the AS-PATH.
+
+Hot potato routing
+: Chose the BGP route with the least cost to the NEXT-HOP router. The cost to
+the NEXT-HOP routers is provided by the intra-AS routing protocol. This
+algorithm is selfish as it does not consider the cost along the whole path but
+only inside the current AS.
+
+![](images/BGP_adding_AS.png)
+
+If there are two or more routes to the same prefix, the following rules are
+used (if two routes have the same value for any of them, the next one will be
+used:
+
+1. Local preference
+    : Can be set by the router or leaned by another route in the same AS. Routes
+    with higher values will be selected.
+2. Shortest AS-PATH
+    : If this was the only rule, BGP would be an AS-level DV algorithm.
+3. Closest NEXT-HOP
+    : Hot potato routing.
+4. BGP identifiers
+
+### IP-Anycast
+
+This mechanism is used for being able to replicate servers (DNS, CDNs, etc.)
+while pointing the client to the best (nearest) server.
+
+This is done by having multiple servers advertise the same IP address. Thanks to
+BGP routing, the best route for each client will be chosen. However, this may
+cause TCP packets destined to one server to arrive at another, which would make
+for a bad user experience. Because DNS does not rely on TCP connections, this is
+very popular for pointing clients to the closest DNS server.
+
+![](images/BGP_CDN.png)
+
+### Routing Policy
+
+The local-preference attribute is the primary factor used for route selection.
+This is fixed by the policy of the local AS.
+
+Multi-homed access ISP
+: Connected to the rest of the network via more than one provider.
+
+Policy is based on commercial relationships between different ISPs (detailed in
+the slides IIRC).
+
+## ICMP:  The Internet Control Message Protocol
+
+This protocol is used by hosts and routers to communicate network information
+with each other, usually error messages. ICMP is not part of IP but an
+upper-layer protocol. They contain type and code fields as well as part of the
+IP datagram that caused the ICMP message to be generated.
+
+The `ping` program as well as `traceroute` are implemented using ICMP. `ping`
+just sends an ICMP echo request and gets an echo back. `traceroute` on the other
+hand sends UDP messages with increasing TTLs such that when the n-th packet
+arrives at the n-th router, the TTL will indicate that the packet should not be
+forwarded on. This causes the router to send back an ICMP alert message
+(containing information about the router) to the origin and this is picked up by
+`traceroute`.
+
+
