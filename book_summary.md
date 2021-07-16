@@ -936,3 +936,69 @@ fragmentation.
 Additionally, the header checksum was removed and the optional fields are
 pointed to instead of being part of the standard header, making the header
 fixed-length.
+
+# 5. The Network Layer: Control Plane
+
+## 5.2 Routing Algorithms
+
+Goal: Find cheap paths from senders to receivers also taking policies into
+account. Graphs are usually used to formulate the problem with edge cost
+determining some kind of important measure like distance, speed or monetary
+cost.
+
+Centralized routing algorithm (Link-State)
+: An algorithm that is aware of all links and their connections (with their
+respective costs) computes shortest paths between source and destination either
+on a central controller or replicated on each router. An example of such an
+algorithm is *Dijkstra's algorithm*. It computes the least cost path from a source
+to all other nodes in the network, thus, when a router finishes the computation,
+it can know the next hop for a given end destination. In some situations (e.g.
+when the path cost is based on network traffic), this algorithm can cause
+oscillations. This can be fixed by randomizing the time at which routers send
+link advertisements so that not all routers run the same instance of the
+algorithm.
+
+Decentralized routing algorithm
+: No node has complete information about the network so cheapest paths are
+calculated iteratively by sending and receiving information to and from
+neighbouring routers.
+
+Static routing algorithms
+: Routes change slowly over time, often because of human interaction.
+
+Dynamic routing algorithm
+: Routes change dynamically according to changes in topology or traffic. More
+responsive to network changes but can suffer problems like loops or route
+oscillation.
+
+### Distance-Vector (DV) Algorithm
+
+This algorithm is an example of a distributed algorithm. It is a distributed
+version of the *Bellman-Ford* algorithm.
+
+Each node $x$ keeps track of the following routing information:
+
+- $c(x, v)$: The patch cost from $x$ to $v$, $v$ being a directly connected to
+  $x$.
+- $D_x = [D_x(y) : y \in N]$: The node's distance vector. $D_x(y)$ being an
+  estimate of the least cost path from $x$ to $y$ and $N$ being the set of
+  nodes.
+- $D_v = [D_v(y) : y \in N]$: The distance vector for each of its neighbors $v$.
+
+Now each node will send its distance vector to all of its neighbors
+asynchronously. When a node receives such a vector, its own vector is updated
+and resent to all the neighbors (if there were any changes):
+
+$$D_x(y) = \min_{v \in \text{neighbors of } x}\{c(x,v) + D_v(y)\}$$ for all $y
+\in N$. $v^*(y)$ is then the router that achieves the minimum for a given $y$ and
+is selected as the next hop router for that destination.
+
+Eventually (as long as the asynchronous communication is not interrupted)
+$D_x(y)$ will converge to the actual cost of the least cost path.
+
+When the link cost changes, the distance vector is recomputed and sent.
+Decreases in cost are propagated quickly while increases are propagated slowly
+and can lead to the *count-to-infinity* problem. This can be mitigated (but not
+fixed for the general case) by *poisoned reverse*. It consists of the following:
+If a router $z$ routes through $y$ to get to $x$, it will advertise to $y$ that
+its distance to $z$ is $\infty$.
