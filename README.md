@@ -1,3 +1,8 @@
+# Image assets
+This summary contains pictures which I do not own. If you are an ETH student and would like to
+have them, please contact me.
+
+# Progress
 - [x] Chapter 1:
 	- [x] 1.1
 	- [x] 1.2
