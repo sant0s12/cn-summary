@@ -738,6 +738,7 @@ and TCP enters *fast recovery mode*.
 
 ![](images/congestion_fsm.png)
 
+
 ### Congestion avoidance mode
 
 When TCP enters this state, `cwnd` is half what it was when congestion as
@@ -749,7 +750,7 @@ being doubled).
 
 When a timeout event occurs, this mode behaves the same as in *slow start* but
 for tree duplicate ACKs, `cwnd` is set to $\frac{\texttt{cwnd}}{2}
-+ 3 \text{MSS}$, `ssthresh` is set to $\frac{\texttt{cwnd}}{2}$ and then
++ 3 \text{MSS}$ (the slides omit adding $3$ MSS), `ssthresh` is set to $\frac{\texttt{cwnd}}{2}$ and then
 *fast recovery mode* is entered.
 
 ### Fast recovery mode
@@ -775,6 +776,7 @@ a saw-tooth pattern in the congestion window size.
 
 ![](images/congestion_window_sawtooth.png)
 
+
 ### Fairness
 
 Fair
@@ -798,6 +800,7 @@ they can increase their congestion window quicker. This is also made worse by
 the fact that each connection on a system counts the same as an independent one,
 making systems with more parallel connections achieve higher bandwidths. Also, 
 the lack of fairness of UDP packets can cause TCP to be crowded out.
+
 
 # 4. The Network Later: Data Plane
 
@@ -1140,4 +1143,324 @@ forwarded on. This causes the router to send back an ICMP alert message
 (containing information about the router) to the origin and this is picked up by
 `traceroute`.
 
+# 6. The Link Layer and LANs
 
+## 6.1 Introduction to the Link Layer
+
+Node
+: Device that runs a link-layer protocol (e.g. hosts, routers. switches, WiFi
+access points, etc.).
+
+Link
+: Communication channel that connects adjacent nodes.
+
+**Possible services provided by the link layer:**
+
+- Framing
+    : As in the upper layers, encapsulation might also be available in the link
+    layer. In this case, network datagrams are encapsulated in link-layer frames
+    with some added header fields.
+
+- Link access
+    : Coordinate frame transmissions onto the broadcast link via a *medium
+    access control (MAC)* protocol. Especially interesting when the link is
+    shared by many nodes and not just two.
+
+- Reliable delivery
+    : Guarantees reliable delivery of frames between nodes. Often used for
+    unreliable links but might be considered as unnecessary overhead.
+
+- Error detection and correction
+    : Errors might be caused by physical interferences. The algorithms
+    are usually implemented in hardware.
+
+Most of the network layer is implemented in hardware inside *network interface
+cards (NICs)*, although some of the higher-level link-layer functions are
+implemented in software. This is the part of the protocol stack where software
+and hardware meet.
+
+![](images/nic.png)
+
+## 6.2 Error-Detection and -Correction Techniques
+
+There is a trade-off between smaller probability of undetected errors and
+overhead.
+
+### Parity Checks
+
+![](images/parity.png)
+
+Simplest form: Adding an extra *parity bit* and setting it such that the number
+of 1s is either even or uneven (depending on the scheme). When a message is
+received the number of 1s is counted and checked against the schema to detect
+errors. Problem: Even number of bit flips causes undetected errors.
+
+This can be generalized into two dimensions where the $d$ message bits are divided
+into $i$ rows and $j$ columns. Then parity bits are computer for each row and
+column (including the parity columns). Now single bit flips can be corrected and
+two bit flips can be detected.
+
+![](images/parity_2d.png)
+
+Forward error correction (FEC)
+: Ability of the receiver to both detect and correct errors. It avoids having
+to wait on a retransmission in case there is an error.
+
+### Checksums
+
+Interpret the $d$ data bits as $k$ bit integers and add them up. Use the
+resulting sum as error-detection bits. This is what the *Internet checksum* is
+based on (explained in [Section 3.3][3.3 Connectionless Transport: UDP]).
+
+This is a simple mechanism with little overhead so it is a good choice if it is
+to be implemented in software (this is the case for the higher layers).
+
+### Cyclic Redundancy Check (CRC)
+
+Unlike software implementations of error correction, hardware implementations
+can be more complex and robust.
+
+The sender adds an extra $r$ bits to the data such that the $r+d$-bit pattern is
+divisible by a generator $G$ of $r+1$ bits. If the receiver performs this
+division and the remainder is not zero it will know that there is an error.
+
+![](images/crc_calculation.png)
+
+For the standard defined generators, consecutive bit errors of $r$ bits or fewer
+will be detected.
+
+## 6.3 Multiple Access Links and Protocols
+
+### Random Access Protocols
+
+In this type of protocol, nodes always transmit at their full rate unless they
+detect a collision. If such a collision event happens, the nodes will retransmit
+the frame after waiting a random amount of time until the frame is sent without
+collision.
+
+### Slotted ALOHA
+
+- All frames are $L$ bits long.
+- Time divided into slots of size $\frac{L}{R}$ seconds (the time to transmit
+  one frame).
+- Transmissions are only started at the beginning of slots.
+- Nodes synchronized so that they know when the slots begin.
+- Collisions are detected before the slots end.
+
+Slotted ALOHA operation:
+
+- Node waits until the beginning of the next slot to transmit a frame.
+- If no collision happened then the transmission was successful.
+- If a collision happened then the fragment is retransmitted in each subsequent
+  slot with probability $p$ until no collision is detected.
+
+This protocol is still not optimal when there is more than one node because of
+collisions and empty slots due to the transmission probability.
+
+Efficiency (in slotted protocols)
+: Long-run fraction of successful slots with multiple nodes actively sending
+frames.
+
+The maximum efficiency for this protocol is 37%. This is given by the equation
+$Np(1-p)^{N-1}$ for a number of nodes $N$ and retransmisison probability $p$.
+
+### ALOHA
+
+ALOHA works like slotted ALOHA but without slots. This means that nodes can
+begin transmission right after receiving a datagram from the network layer. If
+a collision is detected, the node will wait a frame send time and retry
+a retransmission with probability $p$ until there is no collision. This makes
+this protocol half as efficient as slotted ALOHA.
+
+### Carrier Sense Multiple Access (CSMA)
+
+The ALOHA protocol is unaware of the activity of other nodes. This is not the
+case in CSMA.
+
+Carrier sensing
+: Node listens on the channel it wants to send and if there is transmission
+happening, it will wait until it is over.
+
+Collision detection
+: Node listens to channel while its transmitting and if it senses some other
+node trying to transmit on the same channel it will stop and retry (including
+sensing) after some random delay.
+
+The propagation delay also plays a role because a node could start transmitting
+before the transmission of another node arrives, therefore thinking that the
+channel was free.
+
+![](images/csma_collision.png)
+
+This shows that the nodes do not implement collision detection, they continued
+transmitting even though the transmissions where colliding.
+
+An extension of this protocol includes that collision detection.
+
+![](images/csma_collision_avoidance.png)
+
+**CSMA/CD (Collision Detection) Operation:**
+
+1. Node gets datagram from the network layer and puts the generated link-layer
+   frame in the buffer.
+2. If the channel is busy, the node waits until it is free, otherwise it starts
+   the transmission.
+3. While transmitting, the node monitors the channel for other transmissions.
+4. If the frame is transmitted without collision then it was successful,
+   otherwise (if another transmission was detected), it stops transmitting.
+5. If the transmission was aborted, the node waits a random about of time and
+   retries from step 2.
+
+The random amount of time to wait before a retry is defined for example by
+*binary exponential backoff* (which is used in Ethernet). For a frame that has
+experienced $n$ collisions, a value from $[0, 2n-1]$ is randomly chosen as delay.
+
+The efficiency of CSMA/CD is $11+5 \cdot \frac{d_{\text{prop}}}{d_{\text{trans}}}$
+with $d_{\text{prop}}$ being the maximum propagation delay between any two nodes
+and $d_{\text{prop}}$ being the time to transmit a maximum-size frame.
+
+## 6.4 Switched Local Area Networks
+
+MAC Address
+: Link-layer address that is associated with a network interface. Link-layer
+switches do not have MAC addresses. No two adapters can have the same address.
+This address is static (does not change if the network is changed) and not
+hierarchical. There is a special *broadcast address* so that all the devices on
+the LAN receive a frame.
+
+Address Resolution Protocol (ARP)
+: This protocol serves to translate between MAC and IP addresses. It only works
+for devices in the same subnet. To do this, each host maintains a translation
+table between MAC and IP addresses. To populate the table, hosts send out an
+*ARP packet* to the broadcast address containing the source IP address and MAC
+as well as the IP address that is to be resolved. Hosts then check their own IP
+address against the requested one and if they match then they reply with their
+MAC address. The querying host can then update its mapping table.
+
+For a frame to be sent across subnets, it must be first sent to the next-hop
+router. The MAC address of the router's link that is connected to the same
+subnet as the sending host is discovered using ARP. Then a frame is sent out to
+the LAN and processed by the router. Because the network datagram contains the
+designation's host IP address, ARP is used again to discover its MAC address.
+Then it's send over the LAN as usual.
+
+### Ethernet
+
+Widely used for wired LAN. It started out as a broadcast LAN where all frames
+travelled to all adapters connected to the same LAN and used CSMA/CD. This was
+later switched out for network switches.
+
+While CRC checks are performed, there are neither positive nor negative
+acknowledgment frames sent back. When CRC fails, the frame is just dropped. The
+transport is thus unreliable.
+
+### Switches
+
+Filtering
+: Determining if a frame should be dropped or forwarded.
+
+Forwarding
+: Determining the interface to which a frame should be forwarded and then doing
+so.
+
+Switch table
+: Table mapping MAC addresses to the interfaces that lead to them. Contains
+addresses form devices on the same LAN but not necessarily all of them.
+
+**Operation for arriving frame on switch interface x:**
+
+1. There is no entry for the destination MAC address of the frame: The frame
+   will be forwarded to all interfaces (broadcast).
+2. There is a mapping from the destination MAC address to the interface x. Then
+   there is no need to forward the frame as it already comes form x.
+3. There is a mapping from the destination MAC address to an interface other
+   than x. Then the frame is forwarded to just that interface.
+
+**Self learning:**
+
+1. Table is initially empty.
+2. For each frame received, the switch adds a mapping from the source MAC
+   address to the interface on which the frame was received as well as the
+   time when it arrived.
+3. Addresses are deleted from the table after the *aging time* if no frames
+   where received from that MAC.
+
+**Advantages over broadcast links:**
+
+1. Elimination of collisions
+    : 
+2. Heterogeneous links
+    : Switch isolate links from each other so some switches
+   may implement different media or speeds on different links.
+3. Management
+    : Detecting malfunctioning adapters, more localized physical
+   failure, statistics gathering, etc.
+
+![](images/interconnection_comparison.png)
+
+# 7. Wireless and Mobile Networks
+
+## 7.2 Wireless Links and Network Characteristics
+
+Differences between wired and wireless:
+
+- Decreasing signal strength
+    : Signal strength decreases as it passes through objects or the distance
+    increases.
+- Interference from other sources
+    : Other transmitting devices as well as general environmental noise can
+    cause interference.
+- Multipath propagation
+    : Reflections off objects or the ground cause the waves to reach the
+    receiver through different length paths causing the blurring of the received
+    signal.
+
+Signal-to-noise ration (SNR)
+: Relative measure of the strength of the received signal and other background
+noise.
+
+Hidden terminal problem
+: Two transmitting hosts A and B cannot detect each other due to attenuation or
+blockage but their signals cause interference at a third host C.
+
+### CDMA
+
+Each bit being sent is encoded by multiplying it by a signal (*code*) that changes at
+a much faster rate (*chipping rate*).
+
+![](images/cdma_1.png)
+
+The diagram above assumes no interference but this mechanism also works with
+multiple senders if the codes are carefully chosen and under the assumption that
+the interference is additive.
+
+## 7.3 WiFi: 802.11 Wireless LANs
+
+802.11 uses a random access protocol known as CSMA with collision avoidance
+(CSMA/CA). This protocol does not implement collision detection because it is
+expensive to build wireless devices that support that feature. Also, it would
+not be able to detect all collisions due to the *hidden terminal problem*. Also,
+it implements link-layer acknowledgments: When a frame passes the CRC test, the
+receiver waits a short period of time and then sends back an ACK. If the sender
+did not get an ACK after a given about of time, it will retransmit the frame up
+to a defined amount of times.
+
+**CSMA/CA operation:**
+
+1. If channel is idle, send frame after short time.
+2. Otherwise random exponential backoff.
+3. If channel idle, send the whole frame and wait for ACK.
+4. If ACK is received, step to is entered with the next frame. Otherwise backoff is
+    reentered with a larger value interval.
+
+**Solving the hidden terminal problem:**
+
+By using *Request to Send (RTS)* and *Clear to Send (CTS)* control frames,
+stations can reserve channels for transmission.
+
+RTS packets are sent to the receiver when a host wants to send data. It
+indicates the time required to transmit the desired data. When the RTS is
+received, a CTS frame is sent by the receiver giving permission to send and
+warning other hosts of the transmission and its duration.
+
+![](images/csma_hidden_terminal.png)
